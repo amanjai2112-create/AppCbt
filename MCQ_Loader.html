@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MCQ Practice</title>
+<style>
+  body{margin:0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#111;color:#eee;text-align:center}
+  .box{padding:24px;max-width:340px}
+</style>
+</head>
+<body>
+<div class="box" id="msg">Loading...</div>
+<script>
+(function () {
+  // ====== SIRF YE EK LINE BADALNI HAI ======
+  // Apna GitHub Pages link yahan daalo (app.html tak poora)
+  var APP_URL = "https://USERNAME.github.io/REPO/app.html";
+  // =========================================
+
+  var WAIT_MS = 4000;          // itni der tak net ka wait, phir cache wali app chalegi
+  var DB_NAME = "mcq_loader", STORE = "kv", KEY = "app_html";
+
+  function say(t) { var m = document.getElementById("msg"); if (m) m.textContent = t; }
+
+  function openDB() {
+    return new Promise(function (res, rej) {
+      var r = indexedDB.open(DB_NAME, 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore(STORE); };
+      r.onsuccess = function () { res(r.result); };
+      r.onerror = function () { rej(r.error); };
+    });
+  }
+  function getCached() {
+    return openDB().then(function (db) {
+      return new Promise(function (res) {
+        var q = db.transaction(STORE).objectStore(STORE).get(KEY);
+        q.onsuccess = function () { res(q.result || null); };
+        q.onerror = function () { res(null); };
+      });
+    }).catch(function () { return null; });
+  }
+  function saveCached(html) {
+    return openDB().then(function (db) {
+      return new Promise(function (res) {
+        var tx = db.transaction(STORE, "readwrite");
+        tx.objectStore(STORE).put(html, KEY);
+        tx.oncomplete = function () { res(true); };
+        tx.onerror = function () { res(false); };
+      });
+    }).catch(function () { return false; });
+  }
+
+  function fetchLatest() {
+    var ctrl = ("AbortController" in window) ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, WAIT_MS) : null;
+    return fetch(APP_URL, { cache: "no-cache", signal: ctrl ? ctrl.signal : undefined })
+      .then(function (r) {
+        if (timer) clearTimeout(timer);
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.text();
+      })
+      .then(function (t) {
+        // basic sanity check: kharab/khali response cache na ho
+        if (!t || t.length < 1000 || t.indexOf("<script") === -1) throw new Error("bad app file");
+        return t;
+      });
+  }
+
+  function run(html) {
+    document.open();
+    document.write(html);
+    document.close();
+  }
+
+  getCached().then(function (cached) {
+    fetchLatest().then(function (fresh) {
+      if (fresh !== cached) saveCached(fresh);
+      run(fresh);
+    }).catch(function () {
+      if (cached) { run(cached); }
+      else { say("Pehli baar app load karne ke liye internet chahiye. Net on karke dobara kholo."); }
+    });
+  });
+})();
+</script>
+</body>
+</html>
